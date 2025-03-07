@@ -76,7 +76,7 @@ rule HIGHCOV_ART:
     threads: 1
     conda: "env/art.yaml"
     params: 
-        OPTIONS = config["HIGHCOV_ART_PARAMS"],
+        OPTIONS = config["HIGHCOV_ART"],
         OUTNAME = os.path.join(outdir, "HIGHCOV_DATA", "ART_FASTQ", "{sample}_")
     shell:
         '''
@@ -161,7 +161,7 @@ rule LOWCOV_ART:
     threads: 1
     conda: "env/art.yaml"
     params: 
-        OPTIONS = config["LOWCOV_ART_PARAMS"],
+        OPTIONS = config["LOWCOV_ART"],
         OUTNAME = os.path.join(outdir, "LOWCOV_DATA", "ART_FASTQ", "{sample}_")
     shell:
         '''
@@ -174,6 +174,8 @@ rule LOWCOV_MAPPING:
         REF_SEQ = rules.SLIM.output.REF_SEQ
     output: os.path.join(outdir, "LOWCOV_DATA", "BAM", "{sample}.bam")
     threads: workflow.cores * 0.5
+    params: 
+        LOWCOV_SAMTOOLS_VIEW = config['LOWCOV_SAMTOOLS_VIEW']
     conda: "env/bwa.yaml"
     shell: 
         '''
@@ -181,7 +183,7 @@ rule LOWCOV_MAPPING:
         {input.REF_SEQ} \
         -R "@RG\\tID:{wildcards.sample}\\tLB:{wildcards.sample}_WGS\\tPL:ILLUMINA\\tSM:{wildcards.sample}" \
         {input.FASTQ} | \
-        samtools view -b -q30 -f 0x02 -@ {threads} - | samtools sort - > {output}
+        samtools view -b {params.LOWCOV_SAMTOOLS_VIEW} -@ {threads} - | samtools sort - > {output}
         samtools index -@ {threads} {output}
         '''
 

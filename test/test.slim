@@ -1,0 +1,40 @@
+// simulate a general population
+// genome size = 10Mb
+// random mutations
+// 50 generations 
+// 100 individuals
+// random mating
+
+initialize() {
+    defineConstant("SEQ_LENGTH", 1e7);
+    defineConstant("MUT_RATE", 1e-7);
+    defineConstant("RECOM_RATE", 1e-8);
+    defineConstant("NUM_IND", 10);
+
+    initializeSLiMOptions(nucleotideBased=T);
+    initializeAncestralNucleotides(randomNucleotides(SEQ_LENGTH));
+    initializeMutationTypeNuc("m1", 0.5, "f", 0.0);
+    initializeGenomicElementType("g1", m1, 1.0, mmJukesCantor(MUT_RATE));
+    initializeGenomicElement(g1, 0, SEQ_LENGTH-1);
+    initializeRecombinationRate(RECOM_RATE);
+    m1.convertToSubstitution = T;
+}
+
+1 early() {
+	sim.addSubpop("p1", NUM_IND);
+}
+
+1 late() {
+    log_p1 = community.createLogFile("test_log.csv", logInterval=1);
+    log_p1.addCycle();
+    log_p1.addCustomColumn("N_mut", "sum(sim.mutationCounts(p1, sim.mutationsOfType(m1)));");
+    log_p1.addCustomColumn("Freq", "mean(sim.mutationFrequencies(p1, sim.mutationsOfType(m1)));");
+    log_p1.addCustomColumn("Het", "calcHeterozygosity(p1.genomes);");
+}
+
+
+100 late() {
+    sim.outputFull(); # do NOT specify output file
+    p1.genomes.outputVCF(outputMultiallelics = F, simplifyNucleotides = T); # do NOT specify output file
+    sim.simulationFinished();
+}
