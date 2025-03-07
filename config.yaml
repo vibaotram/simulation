@@ -1,0 +1,8 @@
+OUTPUT_DIR: "/home/tvi069/simulation/test/OUTPUT"
+
+SLIM: "/home/tvi069/simulation/test/INPUT/test.slim" # final VCF output needs to be left blank
+
+HIGHCOV_ART_PARAMS: "-ss HS25 -p -l 150 -f 15 -m 200 -s 10"
+HIGHCOV_BCFTOOLS_FILTER: "-i 'QUAL >= 50'"
+
+LOWCOV_ART_PARAMS: "-ss HS25 -p -l 150 -f 0.5 -m 200 -s 10"

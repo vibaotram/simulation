@@ -1,0 +1,212 @@
+container: "docker://vibaotram/simulation:1.0"
+
+outdir = config["OUTPUT_DIR"]
+
+basename, _ = os.path.splitext(os.path.basename(config["SLIM"]))
+
+rule SIMULATION_DATA:
+    input: 
+        os.path.join(outdir, "LOWCOV_DATA", "MARKDUP_BAM", "bamlist"),
+        os.path.join(outdir, "HIGHCOV_DATA", "VCF", basename + "_FILTERED.vcf.gz")
+
+checkpoint SLIM:
+    input: config["SLIM"]
+    output: 
+        VCF = os.path.join(outdir, "SLIM", basename + ".vcf"),
+        REF_SEQ = os.path.join(outdir, "SLIM", basename + "_refseq.fa"),
+        IND_VCF = os.path.join(outdir, "SLIM", basename + ".ind"),
+        FASTA_DIR = directory(os.path.join(outdir, "FASTA"))
+    conda: "env/bwa.yaml"
+    threads: 1
+    shell:
+        '''
+        mkdir -p $(dirname {output.VCF})
+        cd $(dirname {output.VCF})
+        slim -l 0 {input} > output_all.txt
+
+        echo ">1" > {output.REF_SEQ}
+        awk '/Ancestral sequence:/ {{flag=1; next}} /^#/ {{flag=0}} flag' output_all.txt >> {output.REF_SEQ}
+        bwa index {output.REF_SEQ}
+
+        awk '/^##/ {{flag=1}} flag' output_all.txt > {output.VCF}
+
+        bcftools query -l {output.VCF} > {output.IND_VCF}
+
+        mkdir -p {output.FASTA_DIR}
+        while read sample;
+        do
+        touch {output.FASTA_DIR}/${{sample}}.ind
+        done < {output.IND_VCF}
+        '''
+
+
+rule IND_VCF:
+    input: rules.SLIM.output.VCF
+    output: temp(os.path.join(outdir, "FASTA", "{sample}.vcf"))
+    threads: 1
+    shell:
+        '''
+        bcftools view -s {wildcards.sample} -Ov -o {output} {input}
+        '''
+
+rule VCF2FASTA:
+    input: 
+        REF_SEQ = rules.SLIM.output.REF_SEQ,
+        IND_VCF = rules.IND_VCF.output
+    output: os.path.join(outdir, "FASTA", "{sample}.fa")
+    conda: "env/vcflib.yaml"
+    threads: 1
+    shell:
+        '''
+        outdir=$(dirname {output})
+        cd $outdir
+
+        vcf2fasta -f {input.REF_SEQ} {input.IND_VCF}
+        
+        cat ${{outdir}}/{wildcards.sample}_1:0.fa ${{outdir}}/{wildcards.sample}_1:1.fa > {output}
+        rm ${{outdir}}/{wildcards.sample}_1:0.fa ${{outdir}}/{wildcards.sample}_1:1.fa
+        '''
+
+
+rule HIGHCOV_ART:
+    input: rules.VCF2FASTA.output
+    output: 
+        R1 = os.path.join(outdir, "HIGHCOV_DATA", "ART_FASTQ", "{sample}_1.fq"),
+        R2 = os.path.join(outdir, "HIGHCOV_DATA", "ART_FASTQ", "{sample}_2.fq")
+    threads: 1
+    conda: "env/art.yaml"
+    params: 
+        OPTIONS = config["HIGHCOV_ART_PARAMS"],
+        OUTNAME = os.path.join(outdir, "HIGHCOV_DATA", "ART_FASTQ", "{sample}_")
+    shell:
+        '''
+        art_illumina -i {input} -o {params.OUTNAME} {params.OPTIONS}
+        '''
+
+
+rule HIGHCOV_MAPPING:
+    input: 
+        FASTQ = rules.HIGHCOV_ART.output,
+        REF_SEQ = rules.SLIM.output.REF_SEQ
+    output: os.path.join(outdir, "HIGHCOV_DATA", "BAM", "{sample}.bam")
+    threads: workflow.cores 
+    conda: "env/bwa.yaml"
+    shell: 
+        '''
+        bwa mem -t {threads} \
+        {input.REF_SEQ} \
+        -R "@RG\\tID:{wildcards.sample}\\tLB:{wildcards.sample}_WGS\\tPL:ILLUMINA\\tSM:{wildcards.sample}" \
+        {input.FASTQ} | \
+        samtools view -b -q30 -f 0x02 -@ {threads} - | samtools sort - > {output}
+        samtools index -@ {threads} {output}
+        '''
+
+rule HIGHCOV_MARKDUP:
+    input: rules.HIGHCOV_MAPPING.output
+    output: os.path.join(outdir, "HIGHCOV_DATA", "MARKDUP_BAM", "{sample}.bam")
+    threads: workflow.cores * 0.5
+    conda: "env/bwa.yaml"
+    shell:
+        '''
+        picard MarkDuplicates -I {input} -O {output} -M {output}_metrics.txt
+        samtools index -@ {threads} {output}
+        '''
+
+
+def highcov_bamlist(wildcards):
+    checkpoint_output = checkpoints.SLIM.get(**wildcards).output['FASTA_DIR']
+    print(checkpoint_output)
+    return expand(rules.HIGHCOV_MARKDUP.output,
+           sample=glob_wildcards(os.path.join(checkpoint_output, "{sample}.ind")).sample)
+
+rule HIGHCOV_BCFTOOLS_MPILEUP:
+    input:
+        BAMLIST = highcov_bamlist,
+        REF_SEQ = rules.SLIM.output.REF_SEQ
+    output: os.path.join(outdir, "HIGHCOV_DATA", "VCF", basename + ".vcf.gz")
+    threads: workflow.cores
+    shell:
+        '''
+        outdir=$(dirname {output})
+        mkdir -p ${{outdir}}/tmp
+
+        bamlist=${{outdir}}/bamlist
+        ls -1 {input.BAMLIST} > ${{bamlist}}
+        bcftools mpileup -a 'DP,DP4,AD,ADF,ADR,SP' --threads {threads} -Ou \
+        -f {input.REF_SEQ} \
+        -b ${{bamlist}} | \
+        bcftools call -mv -G - | \
+        bcftools view -m2 -M2 -v snps - | \
+        bcftools sort --temp-dir ${{outdir}}/tmp -Oz -o {output}
+
+        bcftools index {output}
+        tabix {output}
+        '''
+
+rule HIGHCOV_BCFTOOLS_FILTER:
+    input: rules.HIGHCOV_BCFTOOLS_MPILEUP.output
+    output: os.path.join(outdir, "HIGHCOV_DATA", "VCF", basename + "_FILTERED.vcf.gz")
+    threads: workflow.cores
+    params: config["HIGHCOV_BCFTOOLS_FILTER"]
+    shell:
+        '''
+        bcftools filter {params} --threads {threads} -Oz -o {output} {input}
+        '''
+
+rule LOWCOV_ART:
+    input: rules.VCF2FASTA.output
+    output: 
+        R1 = os.path.join(outdir, "LOWCOV_DATA", "ART_FASTQ", "{sample}_1.fq"),
+        R2 = os.path.join(outdir, "LOWCOV_DATA", "ART_FASTQ", "{sample}_2.fq")
+    threads: 1
+    conda: "env/art.yaml"
+    params: 
+        OPTIONS = config["LOWCOV_ART_PARAMS"],
+        OUTNAME = os.path.join(outdir, "LOWCOV_DATA", "ART_FASTQ", "{sample}_")
+    shell:
+        '''
+        art_illumina -i {input} -o {params.OUTNAME} {params.OPTIONS}
+        '''
+
+rule LOWCOV_MAPPING:
+    input:
+        FASTQ = rules.LOWCOV_ART.output,
+        REF_SEQ = rules.SLIM.output.REF_SEQ
+    output: os.path.join(outdir, "LOWCOV_DATA", "BAM", "{sample}.bam")
+    threads: workflow.cores * 0.5
+    conda: "env/bwa.yaml"
+    shell: 
+        '''
+        bwa mem -t {threads} \
+        {input.REF_SEQ} \
+        -R "@RG\\tID:{wildcards.sample}\\tLB:{wildcards.sample}_WGS\\tPL:ILLUMINA\\tSM:{wildcards.sample}" \
+        {input.FASTQ} | \
+        samtools view -b -q30 -f 0x02 -@ {threads} - | samtools sort - > {output}
+        samtools index -@ {threads} {output}
+        '''
+
+rule LOWCOV_MARKDUP:
+    input: rules.LOWCOV_MAPPING.output
+    output: os.path.join(outdir, "LOWCOV_DATA", "MARKDUP_BAM", "{sample}.bam")
+    threads: workflow.cores * 0.5
+    conda: "env/bwa.yaml"
+    shell:
+        '''
+        picard MarkDuplicates -I {input} -O {output} -M {output}_metrics.txt
+        samtools index -@ {threads} {output}
+        '''
+
+def lowcov_bamlist(wildcards):
+    checkpoint_output = checkpoints.SLIM.get(**wildcards).output['FASTA_DIR']
+    print(checkpoint_output)
+    return expand(rules.LOWCOV_MARKDUP.output,
+           sample=glob_wildcards(os.path.join(checkpoint_output, "{sample}.ind")).sample)
+
+rule LOWCOV_BAMLIST:
+    input: lowcov_bamlist
+    output: os.path.join(outdir, "LOWCOV_DATA", "MARKDUP_BAM", "bamlist")
+    threads: 1
+    shell: 
+        '''
+        ls -1 {input} > {output}
+        '''
