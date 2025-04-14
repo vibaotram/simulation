@@ -1,6 +1,6 @@
 # Simulating populations and short read data
 
-The purpose of this pipeline is to simulate data for testing imputation methods on low-coverage sequencing data, such as STITCH, GLIMPSE, or QUILT. The pipeline performs SLIM4 simulation, and uses the simulated genotypes to simulate Ilumina reads at high and low coverage that would be used as reference panel/groundtruth and target, respectively, for imputation.
+The purpose of this pipeline is to simulate data for testing imputation methods on low-coverage sequencing (LCS) data, such as STITCH, GLIMPSE, or QUILT. The pipeline performs SLIM4 simulation, and uses the simulated genotypes to simulate Illumina reads at high and low coverage that would be used as reference panel/ground truth and target, respectively, for imputation.
 
 This Snakemake pipeline runs entirely on docker image and conda environment.
 
@@ -28,15 +28,16 @@ There are three main steps to simulate LCS data.
 
 ## Simulation of high-coverage sequencing data
 
-HCS data will be used as reference panel and/or ground truth for imputation. Simulation steps include the three steps as describe for simulation of LCS data, followed by the following steps:
+HCS data will be used as reference panel and/or ground truth for imputation. Simulation steps include the three steps as described for simulation of LCS data, followed by the following steps:
 
 4. Variant calling, performed by bcftools mpileup. Only biallelic SNPs will be retained.
 
 5. SNP filtering by bcftools filter. Filtering parameters are specified on the config file.
 
 ## Software requirements
-- Snakemake (>= 8.10.0, recommendation)
+- Snakemake (>= 8.10.0, recommended)
 - Miniconda3/conda
+- Singularity >= 3.0.0
 
 ## Software included in the pipeline
 - SLiM 4.3
