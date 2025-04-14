@@ -43,6 +43,6 @@ HCS data will be used as reference panel and/or ground truth for imputation. Sim
 - SLiM 4.3
 - samtools and bcftools 1.21
 - ART-MountRainier (lastest)
-- bwa (lastest)
-- picard (latest)
+- bwa (0.7.18)
+- picard (3.3.0)
 - vcflib (lastest)
