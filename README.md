@@ -11,10 +11,11 @@ This Snakemake pipeline runs entirely on docker image and conda environment.
 - [Simulation of high-coverage sequencing data](#simulation-of-high-coverage-sequencing-data)
 - [Software requirements](#software-requirements)
 - [Software included in the pipeline](#software-included-in-the-pipeline)
+- [Run the pipeline](#run-the-pipeline)
 
 ## SLiM4 population simulation 
 
-The only input file of this pipeline is a SLiM recipe. A template for SLiM recipe is [here](./test/test.slim). Model settings and events can be modified at dispersal, however output file of *outputFull()* and *outputVCF()* must be blank as they will be printed in Snakemake output file system. Output of SLiM includes a VCF file and the reference sequence (ancestral sequence) in a fasta file. VCF data will be converted into single fasta files for each individual, by [vcf2fasta](https://github.com/vcflib/vcflib/blob/master/doc/vcf2fasta.md), for read simulation.
+The only input file of this pipeline is a SLiM recipe. A template for SLiM recipe is [here](./test/test.slim). Model settings and events can be modified at dispersal, however output file of *outputVCF()* or *outputVCFSample()* must be blank as they will be printed in Snakemake output file system. Output of population simulation step includes a VCF file and the reference sequence (ancestral sequence) in a fasta file. VCF data will be converted into single fasta files for each individual, by [vcf2fasta](https://github.com/vcflib/vcflib/blob/master/doc/vcf2fasta.md), for read simulation.
 
 ## Simulation of low-coverage sequencing data
 
@@ -46,3 +47,17 @@ HCS data will be used as reference panel and/or ground truth for imputation. Sim
 - bwa (0.7.18)
 - picard (3.3.0)
 - vcflib (lastest)
+
+## Run the pipeline
+
+To run the pipeline:
+1. Prepare a SLiM recipe file, which simulates a population and output a VCF file (see this [example](./test/test.slim))
+2. Prepare a config file with this [template](config.yaml). Path to the SLiM recipe, and parameters for [ART read simulation](https://www.niehs.nih.gov/research/resources/software/biostatistics/art), and [samtools view](https://www.htslib.org/doc/samtools-view.html) need to be specify.
+3. Run snakemake: `snakemake --sdm apptainer conda --configfile [config file]`
+
+After downloading the pipeline, a test run can be executed with the existing SLiM recipe and config file with the following commands.
+```
+git clone https://github.com/vibaotram/simulation.git
+cd SIMULATION
+snakemake --sdm apptainer conda --configfile config/config.yaml
+```

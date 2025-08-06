@@ -1,0 +1,18 @@
+## input
+SLIM: "test/test.slim" # final VCF output needs to be left blank
+
+## output dir
+OUTPUT_DIR: "test/OUTPUT"
+
+## set ART parameters for low-coverage data (if aiming for 1x coverage pair-end reads, set "-p -f 0.5")
+LOWCOV_ART: "-ss HS25 -p -l 150 -f 0.5 -m 200 -s 10"
+
+## set samtools filtering for mapping of low-coverage data
+LOWCOV_SAMTOOLS_VIEW: "-q30 -f 0x02"
+
+## set ART parameters for high-coverage data
+HIGHCOV_ART: "-ss HS25 -p -l 150 -f 15 -m 200 -s 10"
+
+## set samtools filtering for mapping of high-coverage data
+HIGHCOV_BCFTOOLS_FILTER: "-i 'QUAL >= 50'"
+

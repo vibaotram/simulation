@@ -1,8 +1,55 @@
+import re
+import sys
+
 container: "docker://vibaotram/simulation:1.0"
 
-outdir = config["OUTPUT_DIR"]
+outdir = os.path.abspath(config["OUTPUT_DIR"])
 
 basename, _ = os.path.splitext(os.path.basename(config["SLIM"]))
+
+## check SLIM recipe
+class SLiMRecipeError(Exception):
+    pass
+
+def check_slim_recipe(file):
+    call_pattern = re.compile(r'outputVCF(Sample)?\s*\(\s*(.*?)\s*\)')
+    quoted_pattern = re.compile(r'["\']')
+
+    calls = []
+
+    with open(file, 'r') as f:
+        for lineno, line in enumerate(f, start=1):
+            stripped_line = line.lstrip()
+            if stripped_line.startswith('//'):
+                continue  # Skip lines starting with "//"
+
+            match = call_pattern.search(line)
+            if match:
+                arg = match.group(2)
+                has_quotes = bool(quoted_pattern.search(arg))
+                calls.append((lineno, line.strip(), has_quotes))
+
+    if not calls:
+        raise SLiMRecipeError("Output VCF is not called in SLiM recipe " + config["SLIM"] + ". Please call outputVCF() or outputVCFSample() function without output file path specified (see test/test.slim for an example)")
+        # sys.exit(1)
+
+    elif len(calls) == 1:
+        lineno, code, has_quotes = calls[0]
+        if has_quotes:
+            raise SLiMRecipeError(f"outputVCF() is found on line {lineno} in SLiM recipe" + config["SLIM"] + ", but it seems to contain an output file path:\n  {code}.\nPlease remove the file path from the function as output will be written to" + os.path.join(outdir, "SLIM", basename + ".vcf"))
+            # sys.exit(1)
+
+    else:
+        error_lines = "\n".join(
+        f"  Line {lineno}: {code} — {'output file path needs to be blank' if has_quotes else ''}"
+        for lineno, code, has_quotes in calls
+    )
+        raise SLiMRecipeError(f"Only one output VCF can be called - {len(calls)} are found in SLiM recipe " + config["SLIM"] + f":\n{error_lines}")
+        sys.exit(1)
+
+# Example usage
+check_slim_recipe(config["SLIM"])
+
 
 rule SIMULATION_DATA:
     input: 
@@ -10,7 +57,7 @@ rule SIMULATION_DATA:
         os.path.join(outdir, "HIGHCOV_DATA", "VCF", basename + "_FILTERED.vcf.gz")
 
 checkpoint SLIM:
-    input: config["SLIM"]
+    input: os.path.abspath(config["SLIM"])
     output: 
         VCF = os.path.join(outdir, "SLIM", basename + ".vcf"),
         REF_SEQ = os.path.join(outdir, "SLIM", basename + "_refseq.fa"),
