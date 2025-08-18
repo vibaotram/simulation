@@ -58,6 +58,6 @@ To run the pipeline:
 After downloading the pipeline, a test run can be executed with the existing SLiM recipe and config file with the following commands.
 ```
 git clone https://github.com/vibaotram/simulation.git
-cd SIMULATION
+cd simulation
 snakemake --sdm apptainer conda --configfile config/config.yaml
 ```
