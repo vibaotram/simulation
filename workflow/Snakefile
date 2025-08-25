@@ -21,7 +21,7 @@ def check_slim_recipe(file):
         for lineno, line in enumerate(f, start=1):
             stripped_line = line.lstrip()
             if stripped_line.startswith('//'):
-                continue  # Skip lines starting with "//"
+                continue
 
             match = call_pattern.search(line)
             if match:
@@ -31,13 +31,11 @@ def check_slim_recipe(file):
 
     if not calls:
         raise SLiMRecipeError("Output VCF is not called in SLiM recipe " + config["SLIM"] + ". Please call outputVCF() or outputVCFSample() function without output file path specified (see test/test.slim for an example)")
-        # sys.exit(1)
 
     elif len(calls) == 1:
         lineno, code, has_quotes = calls[0]
         if has_quotes:
             raise SLiMRecipeError(f"outputVCF() is found on line {lineno} in SLiM recipe" + config["SLIM"] + ", but it seems to contain an output file path:\n  {code}.\nPlease remove the file path from the function as output will be written to" + os.path.join(outdir, "SLIM", basename + ".vcf"))
-            # sys.exit(1)
 
     else:
         error_lines = "\n".join(
@@ -45,7 +43,6 @@ def check_slim_recipe(file):
         for lineno, code, has_quotes in calls
     )
         raise SLiMRecipeError(f"Only one output VCF can be called - {len(calls)} are found in SLiM recipe " + config["SLIM"] + f":\n{error_lines}")
-        sys.exit(1)
 
 # Example usage
 check_slim_recipe(config["SLIM"])
